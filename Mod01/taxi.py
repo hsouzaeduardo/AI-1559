@@ -47,7 +47,6 @@ def policy_iteration(env, gamma=1.0, theta=1e-8):
         policy = new_policy
     return policy
 
-
 #função para renderizar a execução da política ou seja visualizar o ambiente 
 # enquanto a política é executada
 def render_policy_execution(env, policy, delay=0.5):
@@ -70,8 +69,6 @@ def render_policy_execution(env, policy, delay=0.5):
 
     plt.ioff()
     plt.show()
-
-
 
 #função para avaliar a política
 def evaluate_policy(env, policy, n_episodes=100):
@@ -123,7 +120,6 @@ def render_rgb_array():
   # Visualização da execução da política aprendida
   print("🚕 Executando política com visualização...")
   render_policy_execution(env, policy)
-
 
 #render_ansi()
 render_rgb_array()
