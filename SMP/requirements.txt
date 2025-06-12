@@ -1,0 +1,26 @@
+# Base dependencies
+openai
+fastapi 
+uvicorn
+
+# Streamlit
+streamlit
+watchdog
+
+# LangChain and Azure
+langchain-community
+langchain-openai
+langchain
+azure-search-documents>=11.4
+azure-identity
+
+# Document processing
+unstructured
+langchain-docling
+pypdf
+PyPDF2
+pymupdf
+
+# Environment and utilities
+python-dotenv
+python-multipart

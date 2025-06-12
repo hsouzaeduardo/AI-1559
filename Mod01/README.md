@@ -2,9 +2,9 @@ AMBIENTE OPENAI GYM TAXI V3
 
 Este ambiente faz parte dos ambientes Toy Text, que contém informações gerais sobre o ambiente.
 
-![image](https://github.com/tekgulburak/Q-learning-taxi-v3-/assets/108903426/813ab20c-e1ee-49ee-b1ca-27f6e403edb6)
+![alt text](image.png)
 
-![image](https://github.com/tekgulburak/Q-learning-taxi-v3-/assets/108903426/6b8a4c0d-59c3-4a0c-9650-fe770e3a1cb7)
+![alt text](image-1.png)
 
 
 O Problema do Táxi envolve navegar até passageiros em um mundo em grade, pegá-los e deixá-los em um dos quatro locais.
