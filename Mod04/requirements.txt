@@ -1,0 +1,12 @@
+openai
+fastapi 
+uvicorn
+#Parte 02
+langchain-community
+langchain-openai
+azure-search-documents>=11.4
+azure-identity
+unstructured
+langchain-docling
+python-dotenv
+langchain
