@@ -1,35 +1,51 @@
+# Importa a biblioteca Streamlit para criar interfaces web interativas em Python
 import streamlit as st
+# Importa a biblioteca os para manipulação de variáveis de ambiente e arquivos
 import os
+# Importa a biblioteca tempfile para criar arquivos temporários
 import tempfile
+# Importa a biblioteca time para usar funções relacionadas ao tempo (como sleep)
 import time
+# Importa a biblioteca gc para gerenciamento de memória (garbage collection)
 import gc
+# Importa BytesIO para manipular arquivos em memória (sem salvar no disco)
 from io import BytesIO
+# Importa o carregador de PDF do LangChain
 from langchain_community.document_loaders import PyPDFLoader
+# Importa o AzureSearch do LangChain para busca vetorial no Azure
 from langchain_community.vectorstores import AzureSearch
+# Importa classes para embeddings e LLM do Azure OpenAI
 from langchain_openai import AzureOpenAIEmbeddings, AzureChatOpenAI
+# Importa o chain de Pergunta e Resposta do LangChain
 from langchain.chains import RetrievalQA
+# Importa o divisor de texto por tokens
 from langchain_text_splitters import TokenTextSplitter
+# Outro carregador de PDF do LangChain
 from langchain_community.document_loaders import UnstructuredPDFLoader
+# Importa a classe Document do LangChain
 from langchain.schema import Document
+# Importa função para carregar variáveis de ambiente de um arquivo .env
 from dotenv import load_dotenv
+# Importa biblioteca para ler PDFs
 import PyPDF2
 
-# Carregar variáveis de ambiente
+# Carrega as variáveis de ambiente do arquivo .env
 load_dotenv()
 
-# Configurações do Azure
+# Configurações do Azure (pega as variáveis do ambiente)
 AZURE_AI_SEARCH_SERVICE_NAME = os.getenv("AZURE_AI_SEARCH_SERVICE_NAME")
-AZURE_AI_SEARCH_INDEX_NAME = "reactor-index"
+AZURE_AI_SEARCH_INDEX_NAME = "reactor-index"  # Nome fixo do índice
 AZURE_AI_SEARCH_API_KEY = os.getenv("AZURE_AI_SEARCH_API_KEY")
 AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
 AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
 AZURE_OPENAI_API_VERSION = "2024-02-15-preview"
-AZURE_EMBEDDINGS_MODEL = "text-embedding-3-large"
+AZURE_EMBEDDINGS_MODEL = "text-embedding-3-small"
 AZURE_OPENAI_MODEL = "gpt-4o-mini"
 
 def initialize_azure_services():
     """Inicializa os serviços do Azure"""
     try:
+        # Cria o objeto de embeddings (transforma texto em vetores)
         embeddings = AzureOpenAIEmbeddings(
             model=AZURE_EMBEDDINGS_MODEL,
             azure_endpoint=AZURE_OPENAI_ENDPOINT,
@@ -37,25 +53,27 @@ def initialize_azure_services():
             openai_api_version=AZURE_OPENAI_API_VERSION,
         )
 
+        # Cria o objeto de busca vetorial no Azure
         vector_store = AzureSearch(
             embedding_function=embeddings.embed_query,
             azure_search_endpoint=AZURE_AI_SEARCH_SERVICE_NAME,
             azure_search_key=AZURE_AI_SEARCH_API_KEY,
             index_name=AZURE_AI_SEARCH_INDEX_NAME,
-            # Configurações adicionais para evitar conflitos
+            # Configurações opcionais
             fields=None,
             vector_search_dimensions=None,
             vector_search_profile_name=None,
             semantic_configuration_name=None,
         )
 
+        # Cria o modelo de linguagem (LLM) do Azure OpenAI
         llm = AzureChatOpenAI(
             deployment_name=AZURE_OPENAI_MODEL,
             model=AZURE_OPENAI_MODEL,
             api_version=AZURE_OPENAI_API_VERSION,
             azure_endpoint=AZURE_OPENAI_ENDPOINT,
             api_key=AZURE_OPENAI_API_KEY,
-            temperature=0.1,  # Adicionar controle de temperatura
+            temperature=0.1,  # Controla a criatividade das respostas
         )
         
         return embeddings, vector_store, llm
@@ -66,10 +84,10 @@ def initialize_azure_services():
 def process_uploaded_file(uploaded_file, vector_store):
     """Processa arquivo PDF carregado usando PyPDF2 para evitar arquivos temporários"""
     try:
-        # Método 1: Usar PyPDF2 diretamente com BytesIO
+        # Lê o PDF diretamente da memória usando PyPDF2
         pdf_reader = PyPDF2.PdfReader(BytesIO(uploaded_file.getvalue()))
         
-        # Extrair texto de todas as páginas
+        # Extrai o texto de todas as páginas do PDF
         full_text = ""
         for page_num, page in enumerate(pdf_reader.pages):
             try:
@@ -83,7 +101,7 @@ def process_uploaded_file(uploaded_file, vector_store):
             st.error("Não foi possível extrair texto do PDF.")
             return 0, ""
         
-        # Criar documento do LangChain
+        # Cria um documento do LangChain com o texto extraído
         doc = Document(
             page_content=full_text,
             metadata={
@@ -92,42 +110,42 @@ def process_uploaded_file(uploaded_file, vector_store):
             }
         )
         
-        # Dividir texto em chunks
+        # Divide o texto em pedaços menores (chunks) para facilitar a busca
         text_splitter = TokenTextSplitter(chunk_size=1000, chunk_overlap=100)
         split_docs = text_splitter.split_documents([doc])
         
-        # Adicionar ao vector store
+        # Adiciona os pedaços ao vector store (banco de vetores)
         vector_store.add_documents(split_docs)
         
         return len(split_docs), full_text[:500]
         
     except Exception as e:
-        # Fallback: usar método com arquivo temporário (versão melhorada)
+        # Se falhar, tenta outro método usando arquivo temporário
         st.warning(f"Método PyPDF2 falhou: {e}. Tentando método alternativo...")
         return process_uploaded_file_fallback(uploaded_file, vector_store)
 
 def process_uploaded_file_fallback(uploaded_file, vector_store):
-    """Método fallback usando arquivo temporário com melhor gerenciamento"""
+    """Método alternativo usando arquivo temporário"""
     tmp_file_path = None
     try:
-        # Criar arquivo temporário
+        # Cria um arquivo temporário para salvar o PDF
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
             tmp_file.write(uploaded_file.getvalue())
             tmp_file.flush()
             tmp_file_path = tmp_file.name
         
-        # Pequena pausa para garantir que o arquivo foi fechado
+        # Espera um pouco para garantir que o arquivo foi salvo
         time.sleep(0.1)
         
-        # Carregar documento
+        # Carrega o PDF usando PyPDFLoader
         loader = PyPDFLoader(tmp_file_path)
         docs = loader.load()
         
-        # Dividir texto em chunks
+        # Divide o texto em pedaços menores
         text_splitter = TokenTextSplitter(chunk_size=1000, chunk_overlap=100)
         split_docs = text_splitter.split_documents(docs)
         
-        # Adicionar ao vector store
+        # Adiciona ao vector store
         vector_store.add_documents(split_docs)
         
         return len(split_docs), docs[0].page_content[:500] if docs else ""
@@ -136,34 +154,33 @@ def process_uploaded_file_fallback(uploaded_file, vector_store):
         st.error(f"Erro ao processar arquivo: {str(e)}")
         return 0, ""
     finally:
-        # Limpeza do arquivo temporário com múltiplas tentativas
+        # Tenta apagar o arquivo temporário criado
         if tmp_file_path and os.path.exists(tmp_file_path):
-            for attempt in range(5):  # 5 tentativas
+            for attempt in range(5):  # Tenta até 5 vezes
                 try:
-                    time.sleep(0.1 * (attempt + 1))  # Delay progressivo
+                    time.sleep(0.1 * (attempt + 1))  # Espera um pouco mais a cada tentativa
                     os.unlink(tmp_file_path)
-                    break  # Se conseguiu deletar, sair do loop
+                    break
                 except (PermissionError, OSError) as cleanup_error:
-                    if attempt == 4:  # Última tentativa
+                    if attempt == 4:
                         st.warning(f"Arquivo temporário será limpo pelo sistema: {cleanup_error}")
                     continue
-        
-        # Forçar garbage collection
+        # Força o garbage collector a liberar memória
         gc.collect()
 
 def custom_search_and_answer(question, vector_store, llm, max_docs=3):
-    """Função personalizada para busca e resposta que evita conflitos do Azure Search"""
+    """Busca documentos relevantes e gera resposta usando o LLM"""
     try:
-        # Busca direta usando similarity_search ao invés do retriever
+        # Busca os documentos mais parecidos com a pergunta
         docs = vector_store.similarity_search(question, k=max_docs)
         
         if not docs:
             return "Não foram encontrados documentos relevantes para responder sua pergunta.", []
         
-        # Construir contexto a partir dos documentos encontrados
+        # Junta o conteúdo dos documentos encontrados
         context = "\n\n".join([f"Documento {i+1}:\n{doc.page_content}" for i, doc in enumerate(docs)])
         
-        # Criar prompt para o LLM
+        # Cria o prompt para o modelo de linguagem
         prompt = f"""
 Com base no contexto fornecido, responda à pergunta de forma clara e precisa.
 
@@ -175,10 +192,10 @@ Pergunta: {question}
 Resposta:
 """
         
-        # Usar o LLM diretamente
+        # Chama o modelo de linguagem para gerar a resposta
         response = llm.invoke(prompt)
         
-        # Extrair o conteúdo da resposta
+        # Extrai o texto da resposta
         if hasattr(response, 'content'):
             answer = response.content
         else:
@@ -191,9 +208,9 @@ Resposta:
         return f"Erro ao processar a pergunta: {str(e)}", []
 
 def create_qa_chain(llm, vector_store):
-    """Cria chain de pergunta e resposta"""
+    """Cria um chain de Pergunta e Resposta usando LangChain"""
     try:
-        # Configurar retriever sem parâmetros conflitantes
+        # Configura o retriever para buscar por similaridade
         retriever = vector_store.as_retriever(
             search_type="similarity",
             search_kwargs={"k": 3}
@@ -217,6 +234,7 @@ def create_qa_chain(llm, vector_store):
         )
 
 def main():
+    # Configura a página do Streamlit
     st.set_page_config(
         page_title="RAG com Azure OpenAI",
         page_icon="📄",
@@ -230,7 +248,7 @@ def main():
     with st.sidebar:
         st.header("⚙️ Configurações")
         
-        # Verificar se as variáveis de ambiente estão configuradas
+        # Verifica se as variáveis de ambiente estão configuradas
         env_status = {
             "AZURE_AI_SEARCH_SERVICE_NAME": bool(AZURE_AI_SEARCH_SERVICE_NAME),
             "AZURE_AI_SEARCH_API_KEY": bool(AZURE_AI_SEARCH_API_KEY),
@@ -249,7 +267,7 @@ def main():
             st.warning("⚠️ Configure todas as variáveis de ambiente no arquivo .env")
             return
     
-    # Inicializar serviços
+    # Inicializa os serviços Azure apenas uma vez
     if 'services_initialized' not in st.session_state:
         with st.spinner("Inicializando serviços Azure..."):
             embeddings, vector_store, llm = initialize_azure_services()
@@ -263,12 +281,13 @@ def main():
                 st.error("❌ Falha ao inicializar serviços Azure")
                 return
     
-    # Layout em colunas
+    # Divide a tela em duas colunas
     col1, col2 = st.columns([1, 1])
     
     with col1:
         st.header("📤 Upload de Documentos")
         
+        # Permite o upload de múltiplos arquivos PDF
         uploaded_files = st.file_uploader(
             "Faça upload dos seus documentos PDF",
             type=['pdf'],
@@ -312,8 +331,8 @@ def main():
                             st.write(f"**{file_info['name']}** - {file_info['chunks']} chunks")
                             if file_info['preview']:
                                 st.text_area(
-                                    f"Preview de {file_info['name']}:", 
-                                    file_info['preview'], 
+                                    f"Preview de {file_info['name']}:",
+                                    file_info['preview'],
                                     height=100,
                                     key=f"preview_{file_info['name']}"
                                 )
@@ -321,7 +340,7 @@ def main():
     with col2:
         st.header("💬 Consultas aos Documentos")
         
-        # Perguntas pré-definidas
+        # Perguntas pré-definidas para facilitar o uso
         st.subheader("🎯 Perguntas Frequentes")
         
         predefined_questions = [
@@ -337,7 +356,7 @@ def main():
             index=0
         )
         
-        # Campo de pergunta customizada
+        # Campo para pergunta personalizada
         st.subheader("✍️ Pergunta Personalizada")
         custom_question = st.text_area(
             "Digite sua pergunta:",
@@ -354,7 +373,7 @@ def main():
             else:
                 with st.spinner("🤔 Buscando resposta..."):
                     try:
-                        # Tentar método personalizado primeiro (mais confiável)
+                        # Usa o método personalizado para buscar resposta
                         answer, source_docs = custom_search_and_answer(
                             custom_question,
                             st.session_state.vector_store,
@@ -365,7 +384,7 @@ def main():
                         st.subheader("📋 Resposta:")
                         st.write(answer)
                         
-                        # Mostrar documentos fonte
+                        # Mostra os documentos fonte usados na resposta
                         if source_docs:
                             with st.expander(f"📚 Fontes ({len(source_docs)} documentos)"):
                                 for i, doc in enumerate(source_docs):
@@ -383,7 +402,7 @@ def main():
                     except Exception as e:
                         st.error(f"❌ Erro ao buscar resposta: {str(e)}")
                         
-                        # Tentar método alternativo usando LangChain QA Chain
+                        # Se falhar, tenta método alternativo usando LangChain QA Chain
                         try:
                             st.info("🔄 Tentando método alternativo...")
                             qa_chain = create_qa_chain(
@@ -396,7 +415,7 @@ def main():
                             st.subheader("📋 Resposta (Método Alternativo):")
                             st.write(result["result"])
                             
-                            # Mostrar documentos fonte
+                            # Mostra os documentos fonte
                             if result.get("source_documents"):
                                 with st.expander(f"📚 Fontes ({len(result['source_documents'])} documentos)"):
                                     for i, doc in enumerate(result["source_documents"]):
@@ -415,7 +434,7 @@ def main():
                             st.error(f"❌ Ambos os métodos falharam: {str(alt_error)}")
                             st.info("💡 Tente reformular sua pergunta ou verifique se os documentos foram processados corretamente.")
     
-    # Footer
+    # Rodapé da página
     st.markdown("---")
     st.markdown("🔧 **Sistema RAG** com Azure OpenAI, LangChain e Streamlit")
 
